@@ -26,13 +26,13 @@ from detectron2.modeling.roi_heads.fast_rcnn import FastRCNNOutputLayers, FastRC
 
 
 D2_ROOT = os.path.dirname(os.path.dirname(detectron2.__file__)) # Root of detectron2
-DATA_ROOT = os.getenv('COCO_IMG_ROOT', '/ssd-playpen/data/mscoco/images/')
+DATA_ROOT = 'autodl-tmp/'
 MIN_BOXES = 36
 MAX_BOXES = 36
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--split', default='train2014', help='train2014, val2014')
-parser.add_argument('--batchsize', default=4, type=int, help='batch_size')
+parser.add_argument('--batchsize', default=6, type=int, help='batch_size')
 parser.add_argument('--model', default='res5', type=str, help='options: "res4", "res5"; features come from)')
 parser.add_argument('--weight', default='vg', type=str, 
         help='option: mask, obj, vg. mask:mask_rcnn on COCO, obj: faster_rcnn on COCO, vg: faster_rcnn on Visual Genome')
@@ -152,24 +152,18 @@ def dump_features(writer, detector, pathXid):
 
         item = {
             "img_id": img_id,
-            "img_h": img.shape[0],
-            "img_w": img.shape[1], 
             "objects_id": base64.b64encode(instances.pred_classes.numpy()).decode(),  # int64
             "objects_conf": base64.b64encode(instances.scores.numpy()).decode(),  # float32
-            "attrs_id": base64.b64encode(np.zeros(num_objects, np.int64)).decode(),  # int64
-            "attrs_conf": base64.b64encode(np.zeros(num_objects, np.float32)).decode(),  # float32
-            "num_boxes": num_objects,
-            "boxes": base64.b64encode(instances.pred_boxes.tensor.numpy()).decode(),  # float32
             "features": base64.b64encode(features.numpy()).decode()  # float32
         }
 
         writer.writerow(item)
     
 
-FIELDNAMES = ["img_id", "img_h", "img_w", "objects_id", "objects_conf",
-              "attrs_id", "attrs_conf", "num_boxes", "boxes", "features"]
+FIELDNAMES = ["img_id", "objects_id", "objects_conf","features"]
 def extract_feat(outfile, detector, pathXid):
     # Check existing images in tsv file.
+    #i=0
     wanted_ids = set([image_id[1] for image_id in pathXid])
     found_ids = set()
     if os.path.exists(outfile):
@@ -184,6 +178,7 @@ def extract_feat(outfile, detector, pathXid):
     with open(outfile, 'a') as tsvfile:
         writer = csv.DictWriter(tsvfile, delimiter='\t', fieldnames=FIELDNAMES)
         for start in tqdm.tqdm(range(0, len(pathXid), args.batchsize)):
+            #i+=1
             pathXid_trunk = pathXid[start: start + args.batchsize]
             dump_features(writer, detector, pathXid_trunk)
             """
@@ -193,32 +188,27 @@ def extract_feat(outfile, detector, pathXid):
                 print(e)
                 break
             """
+            #if i>=4:
+            #    break
 
 def load_image_ids(img_root, split_dir):
     """images in the same directory are in the same split"""
     pathXid = []
-    img_root = os.path.join(img_root, split_dir)
-    for name in os.listdir(img_root):
+    img_root1 = img_root+'train2014'
+    for name in os.listdir(img_root1):
         idx = name.split(".")[0]
         pathXid.append(
                 (
-                    os.path.join(img_root, name),
+                    os.path.join(img_root1, name),
                     idx))
-    if split_dir == 'val2014':
-        print("Place the features of minival in the front of val2014 tsv.")
-        # Put the features of 5000 minival images in front.
-        minival_img_ids = set(json.load(open('data/mscoco_imgfeat/coco_minival_img_ids.json')))
-        a, b = [], []
-        for item in pathXid:
-            img_id = item[1]
-            if img_id in minival_img_ids:
-                a.append(item)
-            else:
-                b.append(item)
-        assert len(a) == 5000
-        assert len(a) + len(b) == len(pathXid)
-        pathXid = a + b
-        assert len(pathXid) == 40504
+    img_root2 = img_root+'val2014'
+    for name in os.listdir(img_root2):
+        idx = name.split(".")[0]
+        pathXid.append(
+                (
+                    os.path.join(img_root2, name),
+                    idx))
+    
     return pathXid
 
 def build_model():
@@ -257,4 +247,4 @@ def build_model():
 if __name__ == "__main__":
     pathXid = load_image_ids(DATA_ROOT, args.split)     # Get paths and ids
     detector = build_model()
-    extract_feat('data/mscoco_imgfeat/%s_d2obj36_batch.tsv' % args.split, detector, pathXid)
+    extract_feat('autodl-tmp/trainval_36.tsv', detector, pathXid)
